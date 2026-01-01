@@ -320,13 +320,13 @@ Special variables control parsing behavior:
 
 ## Output Format
 
-iparse produces parse trees in hiccup format:
+iparse produces parse trees as tagged lists:
 
 ```lisp
 (:TAG child1 child2 ...)
 ```
 
-Where `:TAG` is a keyword matching the rule name, and children are either nested nodes or string terminals.
+Each node is a list where the first element is a keyword tag matching the rule name, followed by children which are either nested nodes or string terminals.
 
 ## Hiding
 
