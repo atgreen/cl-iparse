@@ -1,0 +1,224 @@
+;;; auto-flatten-seq.lisp
+;;;
+;;; SPDX-License-Identifier: MIT
+;;;
+;;; Copyright (C) 2026 Your Name
+;;;
+;;; AutoFlattenSeq - O(1) Concatenation for Parse Results
+;;;
+;;; This is a CRITICAL optimization. During GLL parsing, results are
+;;; accumulated via concatenation. Without this optimization, each
+;;; concatenation would be O(n), leading to O(n²) overall behavior
+;;; on long repetitions.
+;;;
+;;; The solution:
+;;; 1. Small sequences (<=threshold items) are merged eagerly
+;;; 2. Large sequences are stored as nested references
+;;; 3. Flattening is deferred until the sequence is actually accessed
+;;;
+;;; This gives O(1) concatenation and O(n) total for n elements.
+
+(in-package #:iparse/afs)
+
+;;;; Constants
+
+(defparameter *afs-threshold* 32
+  "Sequences smaller than this are merged eagerly during conj-flat.
+Larger sequences are stored as nested references.")
+
+
+;;;; AutoFlattenSeq Structure
+;;;;
+;;;; We use a simple struct with a vector that can contain either
+;;;; atomic elements or nested AFS instances.
+
+(defstruct (auto-flatten-seq
+            (:constructor %make-afs)
+            (:conc-name afs-))
+  "A sequence with O(1) concatenation via lazy flattening."
+  (vector #() :type simple-vector :read-only t)
+  (count 0 :type fixnum :read-only t)
+  (dirty-p nil :type boolean :read-only t)
+  (cached-list nil :type list))
+
+(defun afs-p (x)
+  "Return T if X is an auto-flatten-seq."
+  (auto-flatten-seq-p x))
+
+(defun afs-empty-p (afs)
+  "Return T if AFS contains no elements."
+  (zerop (afs-count afs)))
+
+
+;;;; Empty AFS Singleton
+
+(defvar *afs-empty*
+  (%make-afs :vector #() :count 0 :dirty-p nil)
+  "The empty auto-flatten-seq singleton.")
+
+
+;;;; Core Concatenation Operation
+
+(defgeneric conj-flat (seq item)
+  (:documentation
+   "Concatenate ITEM onto SEQ with O(1) performance.
+ITEM can be NIL (ignored), an atom (appended), or another AFS (merged/stacked)."))
+
+(defmethod conj-flat ((seq auto-flatten-seq) (item null))
+  "Concatenating NIL is a no-op."
+  seq)
+
+(defmethod conj-flat ((seq auto-flatten-seq) (item auto-flatten-seq))
+  "Concatenate two AFS instances.
+Small items are merged eagerly; large ones are stored as nested references."
+  (cond
+    ;; If seq is empty, just return item
+    ((afs-empty-p seq)
+     item)
+
+    ;; If item is empty, just return seq
+    ((afs-empty-p item)
+     seq)
+
+    ;; Small item: merge eagerly
+    ((<= (afs-count item) *afs-threshold*)
+     (let* ((seq-vec (afs-vector seq))
+            (item-list (afs-to-list item))
+            (new-vec (concatenate 'simple-vector seq-vec item-list))
+            (new-count (+ (afs-count seq) (afs-count item))))
+       (%make-afs :vector new-vec
+                  :count new-count
+                  :dirty-p (or (afs-dirty-p seq) (afs-dirty-p item)))))
+
+    ;; Large item: store as nested reference (mark dirty)
+    (t
+     (let* ((seq-vec (afs-vector seq))
+            (new-vec (concatenate 'simple-vector seq-vec (vector item)))
+            (new-count (+ (afs-count seq) (afs-count item))))
+       (%make-afs :vector new-vec
+                  :count new-count
+                  :dirty-p t)))))
+
+(defmethod conj-flat ((seq auto-flatten-seq) item)
+  "Concatenate a scalar item onto SEQ."
+  (let* ((seq-vec (afs-vector seq))
+         (new-vec (concatenate 'simple-vector seq-vec (vector item)))
+         (new-count (1+ (afs-count seq))))
+    (%make-afs :vector new-vec
+               :count new-count
+               :dirty-p (afs-dirty-p seq))))
+
+
+;;;; Lazy Flattening
+;;;;
+;;;; When dirty-p is true, the vector contains nested AFS instances
+;;;; that need to be flattened. We use depth-first traversal with
+;;;; explicit index tracking.
+
+(defun true-count (vec)
+  "Return the actual element count of VEC (not logical count)."
+  (length vec))
+
+(defun get-nested (vec index-path)
+  "Navigate into nested vectors following INDEX-PATH."
+  (if (null index-path)
+      vec
+      (let ((v vec))
+        (dolist (idx index-path v)
+          (setf v (if (afs-p v)
+                      (aref (afs-vector v) idx)
+                      (aref v idx)))))))
+
+(defun delve (vec index-path)
+  "Navigate to the leftmost leaf position starting from INDEX-PATH.
+Returns the path to the first atomic element."
+  (loop
+    (let ((elem (get-nested vec index-path)))
+      (if (afs-p elem)
+          ;; Descend into nested AFS
+          (setf index-path (append index-path (list 0)))
+          ;; Found atomic element
+          (return index-path)))))
+
+(defun advance (vec index-path)
+  "Advance to the next position in depth-first traversal.
+Returns NIL when exhausted."
+  (when (null index-path)
+    (return-from advance nil))
+
+  (let* ((parent-path (butlast index-path))
+         (current-idx (car (last index-path)))
+         (parent (if parent-path
+                     (get-nested vec parent-path)
+                     vec))
+         (parent-vec (if (afs-p parent)
+                         (afs-vector parent)
+                         parent))
+         (parent-len (length parent-vec)))
+
+    (cond
+      ;; Can we move to next sibling?
+      ((< (1+ current-idx) parent-len)
+       (delve vec (append parent-path (list (1+ current-idx)))))
+
+      ;; At top level with no more siblings?
+      ((null parent-path)
+       nil)
+
+      ;; Backtrack to parent level
+      (t
+       (advance vec parent-path)))))
+
+(defun flatten-afs (afs)
+  "Flatten AFS into a list. This is the lazy flattening operation."
+  (when (afs-empty-p afs)
+    (return-from flatten-afs nil))
+
+  (if (not (afs-dirty-p afs))
+      ;; Not dirty: vector is already flat
+      (coerce (afs-vector afs) 'list)
+
+      ;; Dirty: need to traverse and flatten
+      (let ((vec (afs-vector afs))
+            (result nil))
+        (when (plusp (length vec))
+          (let ((index-path (delve vec (list 0))))
+            (loop while index-path do
+              (push (get-nested vec index-path) result)
+              (setf index-path (advance vec index-path)))))
+        (nreverse result))))
+
+
+;;;; Conversion Functions
+
+(defun afs-to-list (afs)
+  "Convert AFS to a list, using cached result if available."
+  (or (afs-cached-list afs)
+      (let ((lst (flatten-afs afs)))
+        (setf (afs-cached-list afs) lst)
+        lst)))
+
+(defun afs-to-vector (afs)
+  "Convert AFS to a simple-vector."
+  (coerce (afs-to-list afs) 'simple-vector))
+
+
+;;;; Constructor
+
+(defun make-afs (&optional (initial-vector #()))
+  "Create an AFS from an initial vector of elements.
+Elements should be atomic (not nested AFS)."
+  (if (zerop (length initial-vector))
+      *afs-empty*
+      (%make-afs :vector (coerce initial-vector 'simple-vector)
+                 :count (length initial-vector)
+                 :dirty-p nil)))
+
+
+;;;; Iteration Support
+
+(defmethod print-object ((afs auto-flatten-seq) stream)
+  (print-unreadable-object (afs stream :type t)
+    (format stream ":count ~D~:[~; :dirty~]"
+            (afs-count afs)
+            (afs-dirty-p afs))))
