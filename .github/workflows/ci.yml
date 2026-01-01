@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install SBCL
+      run: sudo apt-get update && sudo apt-get install -y sbcl
+
+    - name: Install ocicl
+      run: |
+        curl -L -o ocicl.deb https://github.com/ocicl/ocicl/releases/latest/download/ocicl_amd64.deb
+        sudo dpkg -i ocicl.deb
+
+    - name: Setup ocicl
+      run: ocicl setup
+
+    - name: Install dependencies
+      run: ocicl install
+
+    - name: Run tests
+      run: |
+        sbcl --non-interactive \
+          --eval '(asdf:load-system :iparse)' \
+          --load test/tests.lisp \
+          --eval '(iparse/tests:run-all-tests)' \
+          --eval '(if (zerop iparse/tests::*fail-count*) (uiop:quit 0) (uiop:quit 1))'
+
+    - name: Run lint
+      run: ocicl lint iparse.asd
