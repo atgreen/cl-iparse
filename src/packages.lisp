@@ -153,16 +153,23 @@
 (defpackage #:iparse/failure
   (:use #:cl #:iparse/util)
   (:export
+   ;; Failure structure
    #:parse-failure
    #:parse-failure-p
-   #:failure-index
-   #:failure-reasons
-   #:failure-line
-   #:failure-column
+   #:parse-failure-index
+   #:parse-failure-reasons
+   #:parse-failure-line
+   #:parse-failure-column
+   #:parse-failure-text-line
+   #:parse-failure-input
    #:make-failure
    #:merge-failures
    #:augment-failure
-   #:format-failure))
+   #:format-failure
+   ;; Condition
+   #:iparse-error
+   #:iparse-error-failure
+   #:signal-parse-error))
 
 (defpackage #:iparse/gll
   (:use #:cl #:iparse/util #:iparse/afs #:iparse/combinators
@@ -224,15 +231,26 @@
                 #:*epsilon*)
   (:import-from #:iparse/failure
                 #:parse-failure
-                #:parse-failure-p)
+                #:parse-failure-p
+                #:iparse-error)
   (:import-from #:iparse/transform
                 #:transform
                 #:add-line-and-column-info)
   (:export
    ;; Core API
    #:parser
+   #:defparser
    #:parse
    #:parses
+   #:with-parser
+
+   ;; Special variables
+   #:*signal-errors*
+   #:*parse-partial*
+   #:*print-parse-tree-indent*
+
+   ;; Conditions and restarts
+   #:iparse-error
    #:parse-failure
    #:parse-failure-p
 
@@ -257,6 +275,14 @@
 
    ;; EBNF helper
    #:ebnf
+
+   ;; Pretty printing
+   #:pprint-parse-tree
+   #:parse-tree-to-string
+
+   ;; Generic functions for extensibility
+   #:parse-node
+   #:transform-with-methods
 
    ;; Post-processing
    #:transform

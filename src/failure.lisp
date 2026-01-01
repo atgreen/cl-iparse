@@ -5,6 +5,8 @@
 ;;; Copyright (C) 2026 Your Name
 ;;;
 ;;; Parse failure handling and error reporting with line/column info.
+;;; Provides both a structure for failure data and a condition for
+;;; signaling parse errors with restarts.
 
 (in-package #:iparse/failure)
 
@@ -16,7 +18,20 @@
   (reasons nil :type list :read-only t)
   (line nil :type (or null fixnum))
   (column nil :type (or null fixnum))
-  (text-line nil :type (or null string)))
+  (text-line nil :type (or null string))
+  (input nil :type (or null string) :read-only t))
+
+
+;;;; Condition Classes
+
+(define-condition iparse-error (error)
+  ((failure :initarg :failure
+            :reader iparse-error-failure
+            :documentation "The parse-failure structure with details."))
+  (:report (lambda (c stream)
+             (format stream "~A" (format-failure (iparse-error-failure c)))))
+  (:documentation "Condition signaled when parsing fails.
+Use restarts to handle: USE-VALUE or CONTINUE."))
 
 (defun make-failure (index reasons)
   "Create a parse failure at INDEX with REASONS.
@@ -135,3 +150,29 @@ Both LINE and COLUMN are 1-based."
                 (parse-failure-index f)
                 (mapcar #'format-reason (parse-failure-reasons f))))
       (format stream "~A" (format-failure f))))
+
+
+;;;; Signaling with Restarts
+
+(defun signal-parse-error (failure)
+  "Signal an iparse-error condition with restarts.
+
+Available restarts:
+  USE-VALUE value - Return value as the parse result
+  CONTINUE        - Return NIL and continue
+
+Example:
+  (handler-bind ((iparse-error
+                  (lambda (c) (invoke-restart 'use-value :fallback))))
+    (parse p input))"
+  (restart-case
+      (error 'iparse-error :failure failure)
+    (use-value (value)
+      :report "Specify a value to use as the parse result."
+      :interactive (lambda ()
+                     (format t "Enter a value: ")
+                     (list (read)))
+      (values value t))
+    (continue ()
+      :report "Return NIL and continue."
+      (values nil nil))))
