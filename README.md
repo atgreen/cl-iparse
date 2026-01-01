@@ -100,6 +100,92 @@ ABNF features:
 - Ranges: `%x30-39` (digits 0-9)
 - Core rules: `ALPHA`, `DIGIT`, `CRLF`, `SP`, `WSP`, etc.
 
+## S-Expression Grammar DSL
+
+As an alternative to EBNF strings, iparse provides a pure S-expression DSL:
+
+### Using defgrammar
+
+```lisp
+(iparse:defgrammar expr
+  (expr   (seq term (* (seq (or "+" "-") term))))
+  (term   (seq factor (* (seq (or "*" "/") factor))))
+  (factor (or number (seq (hide "(") expr (hide ")"))))
+  (number (regex "[0-9]+")))
+
+(expr "1+2*3")
+;; => (:EXPR (:TERM (:FACTOR (:NUMBER "1"))) "+"
+;;           (:TERM (:FACTOR (:NUMBER "2")) "*" (:FACTOR (:NUMBER "3"))))
+```
+
+### Using grammar (anonymous parser)
+
+```lisp
+(let ((p (iparse:grammar
+           (greeting (or "hello" "hi" "hey")))))
+  (iparse:parse p "hello"))
+;; => (:GREETING "hello")
+```
+
+### S-Expression Operators
+
+| S-expr | EBNF | Description |
+|--------|------|-------------|
+| `"literal"` | `'literal'` | String literal |
+| `(regex "pat")` | `#'pat'` | Regular expression |
+| `symbol` | `rule-name` | Non-terminal reference |
+| `(seq a b ...)` | `a b c` | Concatenation |
+| `(or a b ...)` | `a \| b \| c` | Alternation |
+| `(ord a b)` | `a / b` | Ordered choice |
+| `(? x)` | `x?` | Optional |
+| `(* x)` | `x*` | Zero or more |
+| `(+ x)` | `x+` | One or more |
+| `(rep n m x)` | - | Bounded repetition |
+| `(hide x)` | `<x>` | Hide result |
+| `(look x)` | `&x` | Positive lookahead |
+| `(neg x)` | `!x` | Negative lookahead |
+| `(char-range lo hi)` | - | Character range |
+
+### Hidden Rules
+
+Rule names wrapped in `<...>` are automatically hidden:
+
+```lisp
+(iparse:defgrammar spaced-list
+  (<ws>  (regex "[ \\t]*"))           ; Hidden rule
+  (list  (seq item (* (seq <ws> "," <ws> item))))
+  (item  (regex "[a-z]+")))
+
+(spaced-list "a, b, c")
+;; => (:LIST (:ITEM "a") "," (:ITEM "b") "," (:ITEM "c"))
+;; Note: whitespace is hidden
+```
+
+### Comparison: EBNF vs S-Expression
+
+**EBNF string:**
+```lisp
+(iparse:defparser expr "
+  expr = term (('+' | '-') term)*
+  term = factor (('*' | '/') factor)*
+  factor = number | '(' expr ')'
+  number = #'[0-9]+'
+")
+```
+
+**S-expression:**
+```lisp
+(iparse:defgrammar expr
+  (expr   (seq term (* (seq (or "+" "-") term))))
+  (term   (seq factor (* (seq (or "*" "/") factor))))
+  (factor (or number (seq (hide "(") expr (hide ")"))))
+  (number (regex "[0-9]+")))
+```
+
+Both produce identical results. Choose based on preference:
+- EBNF: Compact, familiar to grammar authors
+- S-expression: Full IDE support, Lisp macro integration
+
 ## Error Handling
 
 ### Multiple values (default)
@@ -265,8 +351,10 @@ Example:
 
 | Function/Macro | Description |
 |----------------|-------------|
-| `defparser` | Define a parser as a named function |
-| `parser` | Create a parser object |
+| `defparser` | Define a parser from EBNF string |
+| `defgrammar` | Define a parser from S-expression grammar |
+| `parser` | Create a parser from EBNF string |
+| `grammar` | Create a parser from S-expression grammar |
 | `parse` | Parse input (string, stream, or pathname) |
 | `parses` | Get lazy list of all parses (for ambiguous grammars) |
 | `with-parser` | Create scoped temporary parser |

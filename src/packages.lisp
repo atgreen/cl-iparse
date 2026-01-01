@@ -244,6 +244,10 @@
    #:parses
    #:with-parser
 
+   ;; S-Expression Grammar DSL
+   #:grammar
+   #:defgrammar
+
    ;; Special variables
    #:*signal-errors*
    #:*parse-partial*

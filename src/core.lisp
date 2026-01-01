@@ -212,6 +212,222 @@ Options:
        ',name)))
 
 
+;;;; S-Expression Grammar DSL
+;;;;
+;;;; An alternative to EBNF strings using pure S-expressions.
+;;;; Example:
+;;;;   (defgrammar expr
+;;;;     (expr   (seq term (* (seq (or "+" "-") term))))
+;;;;     (term   (seq factor (* (seq (or "*" "/") factor))))
+;;;;     (factor (or number (seq (hide "(") expr (hide ")"))))
+;;;;     (number (regex "[0-9]+")))
+
+(defun make-keyword-from-symbol (sym)
+  "Convert symbol to keyword, handling <name> hidden rule convention."
+  (let ((name (symbol-name sym)))
+    (if (and (> (length name) 2)
+             (char= (char name 0) #\<)
+             (char= (char name (1- (length name))) #\>))
+        ;; Hidden rule: <ws> -> :WS (but mark for hiding)
+        (values (intern (string-upcase (subseq name 1 (1- (length name)))) :keyword)
+                t)
+        (values (intern (string-upcase name) :keyword)
+                nil))))
+
+(defun compile-sexpr-rule (form)
+  "Compile an S-expression grammar form into a parser combinator form.
+
+Supported forms:
+  \"literal\"        - String literal
+  symbol            - Non-terminal reference
+  (seq a b ...)     - Concatenation
+  (or a b ...)      - Alternation (unordered)
+  (ord a b)         - Ordered choice
+  (* x)             - Zero or more
+  (+ x)             - One or more
+  (? x)             - Optional
+  (rep min max x)   - Bounded repetition
+  (hide x)          - Hide result
+  (hide-tag x)      - Hide tag only
+  (look x)          - Positive lookahead
+  (neg x)           - Negative lookahead
+  (regex pat)       - Regular expression
+  (char-range lo hi) - Character range"
+  (cond
+    ;; String literal
+    ((stringp form)
+     `(iparse/combinators:make-string-parser ,form))
+
+    ;; Non-terminal reference (symbol)
+    ((symbolp form)
+     (multiple-value-bind (kw hidden) (make-keyword-from-symbol form)
+       ;; If the symbol uses <name> convention, hide the reference result
+       (if hidden
+           `(iparse/combinators:hide (iparse/combinators:make-nt ,kw))
+           `(iparse/combinators:make-nt ,kw))))
+
+    ;; Compound forms
+    ((consp form)
+     (let ((op (car form))
+           (args (cdr form)))
+       ;; Use string= on symbol names to handle symbols from any package
+       (let ((op-name (and (symbolp op) (symbol-name op))))
+         (cond
+           ;; Concatenation
+           ((string= op-name "SEQ")
+            (if (= (length args) 1)
+                (compile-sexpr-rule (first args))
+                `(iparse/combinators:make-cat
+                  ,@(mapcar #'compile-sexpr-rule args))))
+
+           ;; Alternation (unordered)
+           ((string= op-name "OR")
+            (if (= (length args) 1)
+                (compile-sexpr-rule (first args))
+                `(iparse/combinators:make-alt
+                  ,@(mapcar #'compile-sexpr-rule args))))
+
+           ;; Ordered choice
+           ((string= op-name "ORD")
+            `(iparse/combinators:make-ord
+              ,(compile-sexpr-rule (first args))
+              ,(compile-sexpr-rule (second args))))
+
+           ;; Zero or more
+           ((string= op-name "*")
+            `(iparse/combinators:make-star
+              ,(compile-sexpr-rule (first args))))
+
+           ;; One or more
+           ((string= op-name "+")
+            `(iparse/combinators:make-plus
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Optional
+           ((string= op-name "?")
+            `(iparse/combinators:make-opt
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Bounded repetition
+           ((string= op-name "REP")
+            `(iparse/combinators:make-rep
+              ,(first args)
+              ,(second args)
+              ,(compile-sexpr-rule (third args))))
+
+           ;; Hide result
+           ((string= op-name "HIDE")
+            `(iparse/combinators:hide
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Hide tag only
+           ((string= op-name "HIDE-TAG")
+            `(iparse/combinators:hide-tag
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Positive lookahead
+           ((string= op-name "LOOK")
+            `(iparse/combinators:make-look
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Negative lookahead
+           ((string= op-name "NEG")
+            `(iparse/combinators:make-neg
+              ,(compile-sexpr-rule (first args))))
+
+           ;; Regular expression
+           ((string= op-name "REGEX")
+            `(iparse/combinators:make-regexp-parser ,(first args)))
+
+           ;; Character range
+           ((string= op-name "CHAR-RANGE")
+            `(iparse/combinators:make-char-range-parser
+              ,(first args)
+              ,(second args)))
+
+           ;; Unknown operator
+           (t
+            (error "Unknown S-expr grammar operator: ~S" op))))))
+
+    (t (error "Invalid S-expr grammar form: ~S" form))))
+
+(defun compile-sexpr-grammar (rules)
+  "Compile a list of (name form) rules into grammar hash-table construction code."
+  (let ((rule-forms nil)
+        (first-rule nil))
+    (dolist (rule rules)
+      (destructuring-bind (name-sym body) rule
+        (multiple-value-bind (kw hidden) (make-keyword-from-symbol name-sym)
+          ;; First non-hidden rule becomes the start production
+          (unless (or first-rule hidden)
+            (setf first-rule kw))
+          (let ((compiled (compile-sexpr-rule body)))
+            ;; If rule name uses <name> convention, hide its tag
+            (when hidden
+              (setf compiled `(iparse/combinators:hide-tag ,compiled)))
+            (push `(setf (gethash ,kw grammar) ,compiled) rule-forms)))))
+    (values (nreverse rule-forms) first-rule)))
+
+(defmacro grammar (&body rules)
+  "Create a parser from S-expression grammar rules.
+
+Each rule is (name form) where name is a symbol and form uses:
+  \"literal\"        - String literal
+  symbol            - Non-terminal reference
+  (seq a b ...)     - Concatenation
+  (or a b ...)      - Alternation
+  (ord a b)         - Ordered choice
+  (* x)             - Zero or more
+  (+ x)             - One or more
+  (? x)             - Optional
+  (rep min max x)   - Bounded repetition
+  (hide x)          - Hide result
+  (look x)          - Positive lookahead
+  (neg x)           - Negative lookahead
+  (regex pat)       - Regular expression
+  (char-range lo hi) - Character range
+
+Rule names starting with < and ending with > (like <ws>) are
+automatically hidden (their tag won't appear in output).
+
+Example:
+  (grammar
+    (expr   (seq term (* (seq (or \"+\" \"-\") term))))
+    (term   (regex \"[0-9]+\")))"
+  (multiple-value-bind (rule-forms first-rule)
+      (compile-sexpr-grammar rules)
+    `(let ((grammar (make-hash-table :test 'eq)))
+       ,@rule-forms
+       ;; Apply standard hiccup reductions to get (:TAG ...) output format
+       (iparse/reduction:apply-standard-reductions grammar)
+       (%make-iparser :grammar grammar
+                      :start-production ,first-rule))))
+
+(defmacro defgrammar (name &body rules)
+  "Define a parser function NAME from S-expression grammar rules.
+
+This creates a function that can be called directly:
+  (defgrammar my-parser
+    (greeting (or \"hello\" \"hi\")))
+  (my-parser \"hello\")  ; => (:GREETING \"hello\")
+
+See GRAMMAR macro for rule syntax.
+
+Example:
+  (defgrammar expr
+    (expr   (seq term (* (seq (or \"+\" \"-\") term))))
+    (term   (seq factor (* (seq (or \"*\" \"/\") factor))))
+    (factor (or number (seq (hide \"(\") expr (hide \")\"))))
+    (number (regex \"[0-9]+\")))"
+  (let ((parser-var (gensym "PARSER")))
+    `(progn
+       (defvar ,parser-var (grammar ,@rules))
+       (defun ,name (text &key start)
+         ,(format nil "Parse TEXT using the ~A grammar.~%~%Returns two values: result and success-p." name)
+         (parse ,parser-var text :start start))
+       ',name)))
+
+
 ;;;; Re-export transform
 
 (setf (fdefinition 'transform) #'iparse/transform:transform)

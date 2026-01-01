@@ -46,4 +46,36 @@
   (format t "   Original: ~S~%" tree)
   (format t "   Transformed: ~S~%" (iparse:transform-with-methods tree)))
 
+;; Test S-expression grammar DSL
+(format t "~%7. S-expression grammar (defgrammar):~%")
+(iparse:defgrammar sexpr-greeting
+  (greeting (or "hello" "hi" "hey")))
+(format t "   (sexpr-greeting \"hello\") => ~S~%" (sexpr-greeting "hello"))
+(format t "   (sexpr-greeting \"hey\") => ~S~%" (sexpr-greeting "hey"))
+
+;; Test more complex S-expr grammar with seq, *, hide
+(format t "~%8. Complex S-expression grammar:~%")
+(iparse:defgrammar sexpr-expr
+  (expr   (seq term (* (seq (or "+" "-") term))))
+  (term   (seq factor (* (seq (or "*" "/") factor))))
+  (factor (or number (seq (hide "(") expr (hide ")"))))
+  (number (regex "[0-9]+")))
+(format t "   (sexpr-expr \"1+2\") => ~S~%" (sexpr-expr "1+2"))
+(format t "   (sexpr-expr \"3*4+5\") => ~S~%" (sexpr-expr "3*4+5"))
+(format t "   (sexpr-expr \"(1+2)*3\") => ~S~%" (sexpr-expr "(1+2)*3"))
+
+;; Test grammar macro (anonymous parser)
+(format t "~%9. Anonymous grammar macro:~%")
+(let ((p (iparse:grammar
+           (word (+ (char-range 97 122))))))  ; a-z
+  (format t "   Parsing 'hello': ~S~%" (iparse:parse p "hello")))
+
+;; Test hidden rules with <name> convention
+(format t "~%10. Hidden rules (<ws>):~%")
+(iparse:defgrammar spaced-list
+  (<ws>  (regex "[ \\t]*"))
+  (list  (seq item (* (seq <ws> "," <ws> item))))
+  (item  (regex "[a-z]+")))
+(format t "   (spaced-list \"a, b, c\") => ~S~%" (spaced-list "a, b, c"))
+
 (format t "~%=== All Features Working ===~%")
