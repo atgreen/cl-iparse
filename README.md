@@ -1,5 +1,7 @@
 # iparse
 
+[![CI](https://github.com/atgreen/cl-iparse/actions/workflows/ci.yml/badge.svg)](https://github.com/atgreen/cl-iparse/actions/workflows/ci.yml)
+
 A Common Lisp port of Clojure's [instaparse](https://github.com/Engelberg/instaparse) parser library.
 
 iparse implements the GLL (Generalized LL) parsing algorithm, supporting:
