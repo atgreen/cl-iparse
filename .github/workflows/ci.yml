@@ -24,7 +24,7 @@ jobs:
         GH_TOKEN: ${{ github.token }}
 
     - name: Setup ocicl
-      run: ocicl setup
+      run: ocicl setup > ~/.sbclrc
 
     - name: Install dependencies
       run: ocicl install
