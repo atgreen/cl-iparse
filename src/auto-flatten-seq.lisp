@@ -151,7 +151,7 @@ Returns NIL when exhausted."
     (return-from advance nil))
 
   (let* ((parent-path (butlast index-path))
-         (current-idx (car (last index-path)))
+         (current-idx (first (last index-path)))
          (parent (if parent-path
                      (get-nested vec parent-path)
                      vec))

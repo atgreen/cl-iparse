@@ -48,6 +48,7 @@
   (:documentation "Matches an exact string literal."))
 
 (defun string-parser-p (x)
+  "Return T if X is a string-parser."
   (typep x 'string-parser))
 
 (defmethod print-object ((p string-parser) stream)
@@ -63,6 +64,7 @@
   (:documentation "Matches a string literal case-insensitively."))
 
 (defun string-ci-parser-p (x)
+  "Return T if X is a string-ci-parser."
   (typep x 'string-ci-parser))
 
 (defmethod print-object ((p string-ci-parser) stream)
@@ -81,6 +83,7 @@
   (:documentation "Matches text using a regular expression."))
 
 (defun regexp-parser-p (x)
+  "Return T if X is a regexp-parser."
   (typep x 'regexp-parser))
 
 (defmethod print-object ((p regexp-parser) stream)
@@ -100,6 +103,7 @@
   (:documentation "Matches a single character within a code point range."))
 
 (defun char-range-parser-p (x)
+  "Return T if X is a char-range-parser."
   (typep x 'char-range-parser))
 
 (defmethod print-object ((p char-range-parser) stream)
@@ -119,6 +123,7 @@
   (:documentation "Concatenation: matches all parsers in sequence."))
 
 (defun cat-parser-p (x)
+  "Return T if X is a cat-parser."
   (typep x 'cat-parser))
 
 (defmethod print-object ((p cat-parser) stream)
@@ -134,6 +139,7 @@
   (:documentation "Alternation: tries all parsers, returns all successes."))
 
 (defun alt-parser-p (x)
+  "Return T if X is an alt-parser."
   (typep x 'alt-parser))
 
 (defmethod print-object ((p alt-parser) stream)
@@ -151,6 +157,7 @@
   (:documentation "Ordered choice: tries parser1 first, parser2 only if parser1 fails."))
 
 (defun ord-parser-p (x)
+  "Return T if X is an ord-parser."
   (typep x 'ord-parser))
 
 (defmethod print-object ((p ord-parser) stream)
@@ -167,6 +174,7 @@
   (:documentation "Optional: matches zero or one occurrence."))
 
 (defun opt-parser-p (x)
+  "Return T if X is an opt-parser."
   (typep x 'opt-parser))
 
 (defmethod print-object ((p opt-parser) stream)
@@ -181,6 +189,7 @@
   (:documentation "Plus: matches one or more occurrences."))
 
 (defun plus-parser-p (x)
+  "Return T if X is a plus-parser."
   (typep x 'plus-parser))
 
 (defmethod print-object ((p plus-parser) stream)
@@ -195,6 +204,7 @@
   (:documentation "Star: matches zero or more occurrences."))
 
 (defun star-parser-p (x)
+  "Return T if X is a star-parser."
   (typep x 'star-parser))
 
 (defmethod print-object ((p star-parser) stream)
@@ -217,6 +227,7 @@
   (:documentation "Repetition: matches between min and max occurrences."))
 
 (defun rep-parser-p (x)
+  "Return T if X is a rep-parser."
   (typep x 'rep-parser))
 
 (defmethod print-object ((p rep-parser) stream)
@@ -234,6 +245,7 @@
   (:documentation "Non-terminal: references another rule by name."))
 
 (defun nt-parser-p (x)
+  "Return T if X is an nt-parser."
   (typep x 'nt-parser))
 
 (defmethod print-object ((p nt-parser) stream)
@@ -248,6 +260,7 @@
   (:documentation "Positive lookahead: succeeds if parser matches, consumes nothing."))
 
 (defun look-parser-p (x)
+  "Return T if X is a look-parser."
   (typep x 'look-parser))
 
 (defmethod print-object ((p look-parser) stream)
@@ -262,6 +275,7 @@
   (:documentation "Negative lookahead: succeeds if parser fails, consumes nothing."))
 
 (defun neg-parser-p (x)
+  "Return T if X is a neg-parser."
   (typep x 'neg-parser))
 
 (defmethod print-object ((p neg-parser) stream)
@@ -276,6 +290,7 @@
   (:documentation "Epsilon: matches empty string, always succeeds."))
 
 (defun epsilon-parser-p (x)
+  "Return T if X is an epsilon-parser."
   (typep x 'epsilon-parser))
 
 (defmethod print-object ((p epsilon-parser) stream)
@@ -319,14 +334,14 @@
   (let ((filtered (remove *epsilon* parsers)))
     (cond
       ((null filtered) *epsilon*)
-      ((null (cdr filtered)) (car filtered))
+      ((null (rest filtered)) (first filtered))
       (t (make-instance 'cat-parser :parsers filtered)))))
 
 (defun make-alt (&rest parsers)
   "Create an alternation of PARSERS."
   (cond
     ((null parsers) *epsilon*)
-    ((null (cdr parsers)) (car parsers))
+    ((null (rest parsers)) (first parsers))
     ((every (lambda (p) (eq p *epsilon*)) parsers) *epsilon*)
     (t (make-instance 'alt-parser :parsers parsers))))
 
@@ -334,7 +349,7 @@
   "Create an ordered choice of PARSERS (right-associative)."
   (cond
     ((null parsers) *epsilon*)
-    ((null (cdr parsers)) (car parsers))
+    ((null (rest parsers)) (first parsers))
     (t (reduce (lambda (p1 p2)
                  (make-instance 'ord-parser :parser1 p1 :parser2 p2))
                parsers

@@ -8,17 +8,17 @@
 ;;; Original: https://github.com/Engelberg/instaparse
 ;;; Licensed under the Eclipse Public License 1.0.
 
-(asdf:defsystem #:iparse
+(asdf:defsystem "iparse"
   :description "A Common Lisp port of Clojure's instaparse parser library.
 Implements the GLL (Generalized LL) parsing algorithm with support for
 ambiguous and left-recursive grammars, EBNF notation, and efficient parsing."
   :author      "Anthony Green <green@moxielogic.com>"
   :license     "EPL-1.0"
   :version     "0.1.0"
-  :depends-on  (#:cl-ppcre
-                #:alexandria
-                #:fset
-                #:closer-mop)
+  :depends-on  ("cl-ppcre"
+                "alexandria"
+                "fset"
+                "closer-mop")
   :serial t
   :components ((:module "src"
                 :components

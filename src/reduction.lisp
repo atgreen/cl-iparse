@@ -80,4 +80,4 @@ Modifies parsers in-place to add reduction specifications."
 (defun singleton-p (parsers)
   "Return T if PARSERS is a list with exactly one element."
   (and (consp parsers)
-       (null (cdr parsers))))
+       (null (rest parsers))))

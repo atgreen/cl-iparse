@@ -81,7 +81,7 @@ Can be called directly as a function: (funcall parser text)"))
 (setf (fdefinition 'look) #'iparse/combinators:make-look)
 (setf (fdefinition 'neg) #'iparse/combinators:make-neg)
 
-(defvar epsilon iparse/combinators:*epsilon*
+(defvar epsilon iparse/combinators:*epsilon* ; lint:suppress special-name-style
   "The epsilon parser - matches empty string.")
 
 
@@ -119,10 +119,10 @@ Options:
     ((iparse/afs:afs-p result)
      (remove nil (mapcar #'unwrap-result (iparse/afs:afs-to-list result))))
     ((consp result)
-     (let ((children (if (consp (cdr result))
-                         (remove nil (mapcar #'unwrap-result (cdr result)))
+     (let ((children (if (consp (rest result))
+                         (remove nil (mapcar #'unwrap-result (rest result)))
                          nil)))
-       (cons (unwrap-result (car result)) children)))
+       (cons (unwrap-result (first result)) children)))
     (t result)))
 
 (defun parse (parser input &key (start nil) (partial *parse-partial*)
@@ -209,7 +209,7 @@ Options:
   :start - The start production (keyword). Defaults to first rule."
   (let ((parser-var (gensym "PARSER")))
     `(progn
-       (defvar ,parser-var (parser ,grammar-spec :start ,start))
+       (defvar ,parser-var (parser ,grammar-spec :start ,start)) ; lint:suppress special-name-style
        (defun ,name (text &key start)
          ,(format nil "Parse TEXT using the ~A grammar.~%~%Returns two values: result and success-p." name)
          (parse ,parser-var text :start start))
@@ -272,8 +272,8 @@ Supported forms:
 
     ;; Compound forms
     ((consp form)
-     (let ((op (car form))
-           (args (cdr form)))
+     (let ((op (first form))
+           (args (rest form)))
        ;; Use string= on symbol names to handle symbols from any package
        (let ((op-name (and (symbolp op) (symbol-name op))))
          (cond
@@ -425,7 +425,7 @@ Example:
     (number (regex \"[0-9]+\")))"
   (let ((parser-var (gensym "PARSER")))
     `(progn
-       (defvar ,parser-var (grammar ,@rules))
+       (defvar ,parser-var (grammar ,@rules)) ; lint:suppress special-name-style
        (defun ,name (text &key start)
          ,(format nil "Parse TEXT using the ~A grammar.~%~%Returns two values: result and success-p." name)
          (parse ,parser-var text :start start))
@@ -467,17 +467,14 @@ Example output:
        (format stream "~ANIL~%" prefix))
       ((atom tree)
        (format stream "~A~S~%" prefix tree))
-      ((and (keywordp (car tree)) (listp (cdr tree)))
+      ((and (keywordp (first tree)) (listp (rest tree)))
        ;; Parse tree node
-       (format stream "~A(~S" prefix (car tree))
-       (if (and (= (length (cdr tree)) 1)
-                (atom (cadr tree)))
-           ;; Single atomic child - keep on same line
-           (format stream " ~S)~%" (cadr tree))
-           ;; Multiple or complex children - indent
-           (progn
+       (format stream "~A(~S" prefix (first tree))
+       (cond ((and (= (length (rest tree)) 1)
+                (atom (cadr tree))) (format stream " ~S)~%" (cadr tree)))
+      (t
              (format stream "~%")
-             (dolist (child (cdr tree))
+             (dolist (child (rest tree))
                (pprint-parse-tree child stream (+ indent *print-parse-tree-indent*)))
              (format stream "~A)~%" prefix))))
       (t
@@ -520,7 +517,7 @@ Example:
   (cond
     ((null tree) nil)
     ((atom tree) tree)
-    ((and (keywordp (car tree)) (listp (cdr tree)))
-     (parse-node (car tree)
-                 (mapcar #'transform-with-methods (cdr tree))))
+    ((and (keywordp (first tree)) (listp (rest tree)))
+     (parse-node (first tree)
+                 (mapcar #'transform-with-methods (rest tree))))
     (t (mapcar #'transform-with-methods tree))))

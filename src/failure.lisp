@@ -92,8 +92,8 @@ Both LINE and COLUMN are 1-based."
 (defun augment-failure (failure text)
   "Add line/column/text-line information to FAILURE."
   (let* ((pos (index->line-column (parse-failure-index failure) text))
-         (line (car pos))
-         (col (cdr pos))
+         (line (first pos))
+         (col (rest pos))
          (text-line (get-line-text line text)))
     (%make-failure
      :index (parse-failure-index failure)

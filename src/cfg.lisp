@@ -52,8 +52,7 @@
     (loop with i = 0
           while (< i (length s))
           for char = (char s i)
-          do (if (and (char= char #\\) (< (1+ i) (length s)))
-                 (let ((next (char s (1+ i))))
+          do (cond ((and (char= char #\\) (< (1+ i) (length s))) (let ((next (char s (1+ i))))
                    (case next
                      (#\n (write-char #\Newline out) (incf i 2))
                      (#\t (write-char #\Tab out) (incf i 2))
@@ -61,8 +60,8 @@
                      (#\\ (write-char #\\ out) (incf i 2))
                      (#\' (write-char #\' out) (incf i 2))
                      (#\" (write-char #\" out) (incf i 2))
-                     (otherwise (write-char char out) (incf i))))
-                 (progn
+                     (otherwise (write-char char out) (incf i)))))
+      (t
                    (write-char char out)
                    (incf i))))))
 
@@ -293,12 +292,12 @@
   (case (tree-tag tree)
     (:rule
      (destructuring-bind (nt-node alt-or-ord) (tree-contents tree)
-       (let ((name (if (eq (tree-tag nt-node) :hide-nt)
+       (let ((name (if (eql (tree-tag nt-node) :hide-nt)
                        (tree-content (tree-content nt-node))
                        (tree-content nt-node)))
              (parser (build-rule alt-or-ord)))
          (list (intern (string-upcase name) :keyword)
-               (if (eq (tree-tag nt-node) :hide-nt)
+               (if (eql (tree-tag nt-node) :hide-nt)
                    (hide-tag parser)
                    parser)))))
 
@@ -377,8 +376,9 @@
     (neg-parser (collect-non-terminals (parser-parser parser)))
     (otherwise nil)))
 
-(defun check-grammar (grammar)
-  "Check that all referenced non-terminals are defined."
+(defun validate-grammar-references (grammar)
+  "Validate that all referenced non-terminals are defined in GRAMMAR.
+Signals an error if any non-terminal is referenced but not defined."
   (let ((defined (alexandria:hash-table-keys grammar))
         (referenced nil))
     (maphash (lambda (key parser)
@@ -419,7 +419,7 @@ Returns (values grammar start-rule)."
           (setf (gethash keyword grammar) parser)))
 
       (apply-standard-reductions grammar)
-      (check-grammar grammar)
+      (validate-grammar-references grammar)
 
       (values grammar (or start first-rule)))))
 

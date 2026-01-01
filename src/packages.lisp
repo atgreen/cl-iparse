@@ -11,6 +11,7 @@
 ;;; Package definitions for iparse.
 
 (defpackage #:iparse/util
+  (:documentation "Utility functions and data structures for iparse.")
   (:use #:cl)
   (:export
    ;; Segment (O(1) substring)
@@ -37,6 +38,7 @@
    #:make-keyword))
 
 (defpackage #:iparse/afs
+  (:documentation "Auto-flatten sequence for O(1) concatenation during parsing.")
   (:use #:cl #:iparse/util)
   (:export
    #:auto-flatten-seq
@@ -51,6 +53,7 @@
    #:afs-to-vector))
 
 (defpackage #:iparse/combinators
+  (:documentation "Parser combinator classes and constructors.")
   (:use #:cl #:iparse/util)
   (:export
    ;; Base class
@@ -142,6 +145,7 @@
    #:copy-parser))
 
 (defpackage #:iparse/reduction
+  (:documentation "Reduction system for transforming parse results into output format.")
   (:use #:cl #:iparse/util #:iparse/afs)
   (:export
    #:reduction
@@ -155,6 +159,7 @@
    #:singleton-p))
 
 (defpackage #:iparse/failure
+  (:documentation "Parse failure handling and error reporting.")
   (:use #:cl #:iparse/util)
   (:export
    ;; Failure structure
@@ -176,6 +181,7 @@
    #:signal-parse-error))
 
 (defpackage #:iparse/gll
+  (:documentation "GLL (Generalized LL) parsing algorithm implementation.")
   (:use #:cl #:iparse/util #:iparse/afs #:iparse/combinators
         #:iparse/reduction #:iparse/failure)
   (:export
@@ -183,6 +189,7 @@
    #:parse-grammar-full))
 
 (defpackage #:iparse/cfg
+  (:documentation "EBNF grammar parser and grammar building.")
   (:use #:cl #:iparse/util #:iparse/afs #:iparse/combinators
         #:iparse/reduction #:iparse/gll)
   (:export
@@ -196,9 +203,10 @@
    #:unwrap-tree
    #:process-regexp
    #:collect-non-terminals
-   #:check-grammar))
+   #:validate-grammar-references))
 
 (defpackage #:iparse/abnf
+  (:documentation "ABNF (RFC 5234) grammar parser.")
   (:use #:cl #:iparse/util #:iparse/afs #:iparse/combinators
         #:iparse/reduction #:iparse/gll)
   (:export
@@ -208,12 +216,14 @@
    #:abnf))
 
 (defpackage #:iparse/transform
+  (:documentation "Post-parse tree transformation utilities.")
   (:use #:cl)
   (:export
    #:transform
    #:add-line-and-column-info))
 
 (defpackage #:iparse
+  (:documentation "A Common Lisp port of instaparse - GLL parser with EBNF/ABNF support.")
   (:use #:cl)
   (:import-from #:iparse/combinators
                 #:make-string-parser

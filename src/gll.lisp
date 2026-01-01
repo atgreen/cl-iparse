@@ -41,6 +41,7 @@
   (full-results (make-hash-table :test 'equal :size 4) :type hash-table))
 
 (defun make-node ()
+  "Create a new empty parse node for memoization."
   (%make-node))
 
 
@@ -131,8 +132,8 @@ Uses generation counter for deduplication."
 Negative listeners execute only when all other work is exhausted."
   (let ((existing (assoc index (tramp-%negative-listeners tramp))))
     (if existing
-        (push thunk (cdr existing))
-        (push (cons index (list thunk))
+        (push thunk (rest existing))
+        (push (list index thunk)
               (tramp-%negative-listeners tramp)))))
 
 (defun pop-highest-negative-listener (tramp)
@@ -143,11 +144,11 @@ Returns (INDEX . THUNK) or NIL."
     (setf (tramp-%negative-listeners tramp)
           (sort (tramp-%negative-listeners tramp) #'> :key #'car))
     (let* ((entry (first (tramp-%negative-listeners tramp)))
-           (index (car entry))
-           (thunks (cdr entry))
-           (thunk (pop (cdr (first (tramp-%negative-listeners tramp))))))
+           (index (first entry))
+           (thunks (rest entry))
+           (thunk (pop (rest (first (tramp-%negative-listeners tramp))))))
       ;; Remove entry if no more thunks
-      (when (null (cdr (first (tramp-%negative-listeners tramp))))
+      (when (null (rest (first (tramp-%negative-listeners tramp))))
         (pop (tramp-%negative-listeners tramp)))
       (cons index thunk))))
 
@@ -188,8 +189,8 @@ Returns (INDEX . THUNK) or NIL."
 (defun push-result (tramp node-key result)
   "Push a parse result to the node, notifying listeners."
   (let* ((node (get-node tramp node-key))
-         (parser (cdr node-key))
-         (start-index (car node-key))
+         (parser (rest node-key))
+         (start-index (first node-key))
          ;; Apply reduction if specified
          (result (apply-parser-reduction parser result start-index))
          ;; Check if result reaches end of input
@@ -219,7 +220,7 @@ Returns (INDEX . THUNK) or NIL."
        (make-success nil end-index))
       ((null reduction)
        result)
-      ((eq reduction :raw)
+      ((eql reduction :raw)
        ;; Raw: pass through for flattening
        result)
       ((reduction-p reduction)
@@ -250,8 +251,8 @@ Initiates parsing if this is the first listener."
              (node-full-results node))
     ;; If first listener, initiate parse
     (when first-listener-p
-      (let ((index (car node-key))
-            (parser (cdr node-key)))
+      (let ((index (first node-key))
+            (parser (rest node-key)))
         (push-stack tramp (lambda () (parse-at parser index tramp)))))))
 
 (defun push-full-listener (tramp node-key listener)
@@ -266,8 +267,8 @@ Initiates parsing if this is the first listener."
              (node-full-results node))
     ;; If first full listener, initiate full parse
     (when first-listener-p
-      (let ((index (car node-key))
-            (parser (cdr node-key)))
+      (let ((index (first node-key))
+            (parser (rest node-key)))
         (push-stack tramp (lambda () (full-parse-at parser index tramp)))))))
 
 
@@ -275,6 +276,7 @@ Initiates parsing if this is the first listener."
 
 (defun fail (tramp node-key index reason-plist)
   "Record a parse failure at INDEX."
+  (declare (ignore node-key))
   (let ((new-failure (make-failure index (list reason-plist))))
     (setf (tramp-%failure tramp)
           (merge-failures (tramp-%failure tramp) new-failure))))
@@ -304,7 +306,7 @@ Initiates parsing if this is the first listener."
   "Create a listener for positive lookahead (don't consume input)."
   (lambda (result)
     (declare (ignore result))
-    (succeed tramp node-key nil (car node-key))))
+    (succeed tramp node-key nil (first node-key))))
 
 (defun make-cat-listener (results-so-far remaining-parsers node-key tramp)
   "Create a listener for concatenation."
@@ -685,11 +687,10 @@ Initiates parsing if this is the first listener."
          (node-key (node-key index parser))
          (inner-key (node-key index inner)))
     ;; If inner already has results, fail immediately
-    (if (result-exists-p tramp inner-key)
-        (fail tramp node-key index
+    (cond ((result-exists-p tramp inner-key) (fail tramp node-key index
               (list :tag :negative-lookahead
-                    :expecting (list :not (format nil "~A" inner))))
-        (progn
+                    :expecting (list :not (format nil "~A" inner)))))
+      (t
           ;; Register listener that fails if inner succeeds
           (push-listener tramp inner-key
                          (lambda (result)
@@ -731,7 +732,7 @@ Returns a lazy list of successful results."
       ((tramp-%negative-listeners tramp)
        (let ((entry (pop-highest-negative-listener tramp)))
          (when entry
-           (funcall (cdr entry))))
+           (funcall (rest entry))))
        (run-trampoline tramp found-result-p))
 
       ;; Swap stacks for next generation
@@ -763,7 +764,7 @@ Returns the first successful parse result, or NIL with failure info."
     ;; Run and get results
     (let ((results (run-trampoline tramp)))
       (if results
-          (values (success-result (car results)) t)
+          (values (success-result (first results)) t)
           (values (augment-failure (tramp-%failure tramp) text) nil)))))
 
 (defun parse-grammar-full (grammar start-rule text)

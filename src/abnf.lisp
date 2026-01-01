@@ -407,7 +407,7 @@ Single char, range (with -), or sequence (with .)."
     ((= (length contents) 1)
      (let ((item (iparse/cfg::unwrap-tree (first contents))))
        (cond
-         ((equal item "*") (cons 0 nil))
+         ((equal item "*") (list 0))
          ((stringp item) (let ((n (parse-integer item)))
                            (cons n n)))
          (t (cons 1 1)))))
@@ -418,18 +418,18 @@ Single char, range (with -), or sequence (with .)."
          ((equal first-item "*")
           (cons 0 (parse-integer second-item)))
          (t
-          (cons (parse-integer first-item) nil)))))
+          (list (parse-integer first-item))))))
     ((= (length contents) 3)
      (cons (parse-integer (iparse/cfg::unwrap-tree (first contents)))
            (parse-integer (iparse/cfg::unwrap-tree (third contents)))))
-    (t (cons 0 nil))))
+    (t (list 0))))
 
 (defun apply-repeat (repeat-info element)
   "Apply repeat specification to element parser."
   (if (null repeat-info)
       element
-      (let ((low (car repeat-info))
-            (high (cdr repeat-info)))
+      (let ((low (first repeat-info))
+            (high (rest repeat-info)))
         (cond
           ((and (zerop low) (null high)) (make-star element))
           ((and (= low 1) (null high)) (make-plus element))
@@ -447,24 +447,25 @@ Single char, range (with -), or sequence (with .)."
            (push "-" result))
           ((stringp unwrapped)
            (push (parse-int-radix unwrapped radix) result))
-          ((eq (iparse/cfg::tree-tag item) :bin-char)
+          ((eql (iparse/cfg::tree-tag item) :bin-char)
            (push (parse-int-radix (apply #'concatenate 'string
                                          (mapcar #'iparse/cfg::unwrap-tree
                                                  (iparse/cfg::tree-contents item)))
                                   radix)
                  result))
-          ((eq (iparse/cfg::tree-tag item) :dec-char)
+          ((eql (iparse/cfg::tree-tag item) :dec-char)
            (push (parse-int-radix (apply #'concatenate 'string
                                          (mapcar #'iparse/cfg::unwrap-tree
                                                  (iparse/cfg::tree-contents item)))
                                   radix)
                  result))
-          ((eq (iparse/cfg::tree-tag item) :hex-char)
+          ((eql (iparse/cfg::tree-tag item) :hex-char)
            (push (parse-int-radix (apply #'concatenate 'string
                                          (mapcar #'iparse/cfg::unwrap-tree
                                                  (iparse/cfg::tree-contents item)))
                                   radix)
-                 result)))))
+                 result))
+          (t nil))))  ; Ignore unrecognized items
     (nreverse result)))
 
 
@@ -525,7 +526,7 @@ Returns (values grammar start-rule)."
 
       (iparse/reduction:apply-standard-reductions grammar)
       (merge-core-rules grammar)
-      (iparse/cfg::check-grammar grammar)
+      (iparse/cfg::validate-grammar-references grammar)
 
       (values grammar (or start first-rule)))))
 
