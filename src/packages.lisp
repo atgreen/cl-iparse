@@ -186,6 +186,7 @@
         #:iparse/reduction #:iparse/failure)
   (:export
    #:parse-grammar
+   #:parse-grammar-partial
    #:parse-grammar-full))
 
 (defpackage #:iparse/cfg

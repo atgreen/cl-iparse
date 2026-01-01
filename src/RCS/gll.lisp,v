@@ -1,8 +1,31 @@
-;;; gll.lisp
+head	1.1;
+access;
+symbols;
+locks
+	green:1.1; strict;
+comment	@;;; @;
+
+
+1.1
+date	2026.01.01.12.35.43;	author green;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@'Before ocicl lint --fix'
+@
+text
+@;;; gll.lisp
 ;;;
 ;;; SPDX-License-Identifier: EPL-1.0
 ;;;
-;;; Copyright (C) 2026 Anthony Green <green@moxielogic.com>
+;;; Copyright (C) 2026 Anthony Green <green@@moxielogic.com>
 ;;;
 ;;; This is a Common Lisp port of instaparse by Mark Engelberg.
 ;;; Original: https://github.com/Engelberg/instaparse
@@ -41,7 +64,6 @@
   (full-results (make-hash-table :test 'equal :size 4) :type hash-table))
 
 (defun make-node ()
-  "Create a new empty parse node for memoization."
   (%make-node))
 
 
@@ -126,39 +148,29 @@ Uses generation counter for deduplication."
 
 
 ;;;; Negative Listeners (for ordered choice and negative lookahead)
-;;;;
-;;;; We maintain the list sorted by index descending at insertion time,
-;;;; so pop is O(1) and insertion is O(n) in the number of distinct indices.
-
-(defun insert-sorted-descending (entry list)
-  "Insert ENTRY into LIST maintaining descending order by (first entry)."
-  (let ((index (first entry)))
-    (if (or (null list) (> index (first (first list))))
-        (cons entry list)
-        (cons (first list) (insert-sorted-descending entry (rest list))))))
 
 (defun push-negative-listener (tramp index thunk)
   "Register a negative listener at INDEX.
 Negative listeners execute only when all other work is exhausted."
   (let ((existing (assoc index (tramp-%negative-listeners tramp))))
     (if existing
-        ;; Add thunk to existing entry
-        (push thunk (rest existing))
-        ;; Insert new entry in sorted position
-        (setf (tramp-%negative-listeners tramp)
-              (insert-sorted-descending (list index thunk)
-                                        (tramp-%negative-listeners tramp))))))
+        (push thunk (cdr existing))
+        (push (cons index (list thunk))
+              (tramp-%negative-listeners tramp)))))
 
 (defun pop-highest-negative-listener (tramp)
   "Pop and return the negative listener at the highest index.
 Returns (INDEX . THUNK) or NIL."
   (when (tramp-%negative-listeners tramp)
-    ;; List is already sorted descending, so first entry is highest
+    ;; Sort by index descending and pop first
+    (setf (tramp-%negative-listeners tramp)
+          (sort (tramp-%negative-listeners tramp) #'> :key #'car))
     (let* ((entry (first (tramp-%negative-listeners tramp)))
-           (index (first entry))
-           (thunk (pop (rest (first (tramp-%negative-listeners tramp))))))
+           (index (car entry))
+           (thunks (cdr entry))
+           (thunk (pop (cdr (first (tramp-%negative-listeners tramp))))))
       ;; Remove entry if no more thunks
-      (when (null (rest (first (tramp-%negative-listeners tramp))))
+      (when (null (cdr (first (tramp-%negative-listeners tramp))))
         (pop (tramp-%negative-listeners tramp)))
       (cons index thunk))))
 
@@ -199,8 +211,8 @@ Returns (INDEX . THUNK) or NIL."
 (defun push-result (tramp node-key result)
   "Push a parse result to the node, notifying listeners."
   (let* ((node (get-node tramp node-key))
-         (parser (rest node-key))
-         (start-index (first node-key))
+         (parser (cdr node-key))
+         (start-index (car node-key))
          ;; Apply reduction if specified
          (result (apply-parser-reduction parser result start-index))
          ;; Check if result reaches end of input
@@ -230,7 +242,7 @@ Returns (INDEX . THUNK) or NIL."
        (make-success nil end-index))
       ((null reduction)
        result)
-      ((eql reduction :raw)
+      ((eq reduction :raw)
        ;; Raw: pass through for flattening
        result)
       ((reduction-p reduction)
@@ -261,8 +273,8 @@ Initiates parsing if this is the first listener."
              (node-full-results node))
     ;; If first listener, initiate parse
     (when first-listener-p
-      (let ((index (first node-key))
-            (parser (rest node-key)))
+      (let ((index (car node-key))
+            (parser (cdr node-key)))
         (push-stack tramp (lambda () (parse-at parser index tramp)))))))
 
 (defun push-full-listener (tramp node-key listener)
@@ -277,8 +289,8 @@ Initiates parsing if this is the first listener."
              (node-full-results node))
     ;; If first full listener, initiate full parse
     (when first-listener-p
-      (let ((index (first node-key))
-            (parser (rest node-key)))
+      (let ((index (car node-key))
+            (parser (cdr node-key)))
         (push-stack tramp (lambda () (full-parse-at parser index tramp)))))))
 
 
@@ -286,7 +298,6 @@ Initiates parsing if this is the first listener."
 
 (defun fail (tramp node-key index reason-plist)
   "Record a parse failure at INDEX."
-  (declare (ignore node-key))
   (let ((new-failure (make-failure index (list reason-plist))))
     (setf (tramp-%failure tramp)
           (merge-failures (tramp-%failure tramp) new-failure))))
@@ -316,7 +327,7 @@ Initiates parsing if this is the first listener."
   "Create a listener for positive lookahead (don't consume input)."
   (lambda (result)
     (declare (ignore result))
-    (succeed tramp node-key nil (first node-key))))
+    (succeed tramp node-key nil (car node-key))))
 
 (defun make-cat-listener (results-so-far remaining-parsers node-key tramp)
   "Create a listener for concatenation."
@@ -697,10 +708,11 @@ Initiates parsing if this is the first listener."
          (node-key (node-key index parser))
          (inner-key (node-key index inner)))
     ;; If inner already has results, fail immediately
-    (cond ((result-exists-p tramp inner-key) (fail tramp node-key index
+    (if (result-exists-p tramp inner-key)
+        (fail tramp node-key index
               (list :tag :negative-lookahead
-                    :expecting (list :not (format nil "~A" inner)))))
-      (t
+                    :expecting (list :not (format nil "~A" inner))))
+        (progn
           ;; Register listener that fails if inner succeeds
           (push-listener tramp inner-key
                          (lambda (result)
@@ -742,7 +754,7 @@ Returns a lazy list of successful results."
       ((tramp-%negative-listeners tramp)
        (let ((entry (pop-highest-negative-listener tramp)))
          (when entry
-           (funcall (rest entry))))
+           (funcall (cdr entry))))
        (run-trampoline tramp found-result-p))
 
       ;; Swap stacks for next generation
@@ -774,33 +786,8 @@ Returns the first successful parse result, or NIL with failure info."
     ;; Run and get results
     (let ((results (run-trampoline tramp)))
       (if results
-          (values (success-result (first results)) t)
-          (let ((failure (or (tramp-%failure tramp)
-                             (make-failure 0 (list (list :tag :string
-                                                         :expecting "complete parse"))))))
-            (values (augment-failure failure text) nil))))))
-
-(defun parse-grammar-partial (grammar start-rule text)
-  "Parse TEXT using GRAMMAR starting from START-RULE, allowing partial matches.
-Returns the first successful parse result (may not consume all input)."
-  (let* ((tramp (make-trampoline grammar text))
-         (start-parser (gethash start-rule grammar)))
-    (unless start-parser
-      (error "Start rule ~A not found in grammar" start-rule))
-
-    ;; Register regular listener (not full) for partial parse
-    (push-listener tramp
-                   (node-key 0 start-parser)
-                   (make-top-listener tramp))
-
-    ;; Run and get results
-    (let ((results (run-trampoline tramp)))
-      (if results
-          (values (success-result (first results)) t)
-          (let ((failure (or (tramp-%failure tramp)
-                             (make-failure 0 (list (list :tag :string
-                                                         :expecting "partial match"))))))
-            (values (augment-failure failure text) nil))))))
+          (values (success-result (car results)) t)
+          (values (augment-failure (tramp-%failure tramp) text) nil)))))
 
 (defun parse-grammar-full (grammar start-rule text)
   "Parse TEXT using GRAMMAR, returning all possible parses as a lazy list."
@@ -814,3 +801,4 @@ Returns the first successful parse result (may not consume all input)."
                         (make-top-listener tramp))
 
     (run-trampoline tramp)))
+@

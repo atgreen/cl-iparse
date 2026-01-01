@@ -1,8 +1,31 @@
-;;; core.lisp
+head	1.1;
+access;
+symbols;
+locks
+	green:1.1; strict;
+comment	@;;; @;
+
+
+1.1
+date	2026.01.01.12.35.43;	author green;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@'Before ocicl lint --fix'
+@
+text
+@;;; core.lisp
 ;;;
 ;;; SPDX-License-Identifier: EPL-1.0
 ;;;
-;;; Copyright (C) 2026 Anthony Green <green@moxielogic.com>
+;;; Copyright (C) 2026 Anthony Green <green@@moxielogic.com>
 ;;;
 ;;; This is a Common Lisp port of instaparse by Mark Engelberg.
 ;;; Original: https://github.com/Engelberg/instaparse
@@ -81,7 +104,7 @@ Can be called directly as a function: (funcall parser text)"))
 (setf (fdefinition 'look) #'iparse/combinators:make-look)
 (setf (fdefinition 'neg) #'iparse/combinators:make-neg)
 
-(defvar epsilon iparse/combinators:*epsilon* ; lint:suppress special-name-style
+(defvar epsilon iparse/combinators:*epsilon*
   "The epsilon parser - matches empty string.")
 
 
@@ -112,19 +135,17 @@ Options:
 ;;;; Parsing Functions
 
 (defun unwrap-result (result)
-  "Clean up parse result: convert AFS to lists, remove NIL children, preserve metadata."
+  "Recursively unwrap metaobjects from parse result, removing NIL children."
   (cond
     ((iparse/util:metaobject-p result)
-     ;; Preserve metaobject wrapper, process internal value
-     (iparse/util:with-meta (unwrap-result (iparse/util:metaobject-value result))
-                            (iparse/util:metaobject-metadata result)))
+     (unwrap-result (iparse/util:metaobject-value result)))
     ((iparse/afs:afs-p result)
      (remove nil (mapcar #'unwrap-result (iparse/afs:afs-to-list result))))
     ((consp result)
-     (let ((children (if (consp (rest result))
-                         (remove nil (mapcar #'unwrap-result (rest result)))
+     (let ((children (if (consp (cdr result))
+                         (remove nil (mapcar #'unwrap-result (cdr result)))
                          nil)))
-       (cons (unwrap-result (first result)) children)))
+       (cons (unwrap-result (car result)) children)))
     (t result)))
 
 (defun parse (parser input &key (start nil) (partial *parse-partial*)
@@ -154,7 +175,7 @@ Options:
     (multiple-value-bind (result success-p)
         (if total
             (iparse/gll:parse-grammar grammar start-rule text)
-            (iparse/gll:parse-grammar-partial grammar start-rule text))
+            (iparse/gll:parse-grammar grammar start-rule text))
       (if success-p
           (values (unwrap-result result) t)
           (if signal-errors
@@ -171,9 +192,10 @@ Options:
 
 (defun read-file-content (pathname)
   "Read entire content of file at PATHNAME as a string."
-  (with-open-file (stream pathname :direction :input
-                                   :external-format :utf-8)
-    (read-stream-content stream)))
+  (with-open-file (stream pathname :direction :input)
+    (let ((content (make-string (file-length stream))))
+      (read-sequence content stream)
+      content)))
 
 (defun parses (parser text &key (start nil))
   "Parse TEXT using PARSER, returning all possible parses.
@@ -210,7 +232,7 @@ Options:
   :start - The start production (keyword). Defaults to first rule."
   (let ((parser-var (gensym "PARSER")))
     `(progn
-       (defparameter ,parser-var (parser ,grammar-spec :start ,start)) ; lint:suppress special-name-style
+       (defvar ,parser-var (parser ,grammar-spec :start ,start))
        (defun ,name (text &key start)
          ,(format nil "Parse TEXT using the ~A grammar.~%~%Returns two values: result and success-p." name)
          (parse ,parser-var text :start start))
@@ -273,8 +295,8 @@ Supported forms:
 
     ;; Compound forms
     ((consp form)
-     (let ((op (first form))
-           (args (rest form)))
+     (let ((op (car form))
+           (args (cdr form)))
        ;; Use string= on symbol names to handle symbols from any package
        (let ((op-name (and (symbolp op) (symbol-name op))))
          (cond
@@ -283,14 +305,14 @@ Supported forms:
             (if (= (length args) 1)
                 (compile-sexpr-rule (first args))
                 `(iparse/combinators:make-cat
-                  ,@(mapcar #'compile-sexpr-rule args))))
+                  ,@@(mapcar #'compile-sexpr-rule args))))
 
            ;; Alternation (unordered)
            ((string= op-name "OR")
             (if (= (length args) 1)
                 (compile-sexpr-rule (first args))
                 `(iparse/combinators:make-alt
-                  ,@(mapcar #'compile-sexpr-rule args))))
+                  ,@@(mapcar #'compile-sexpr-rule args))))
 
            ;; Ordered choice
            ((string= op-name "ORD")
@@ -402,7 +424,7 @@ Example:
   (multiple-value-bind (rule-forms first-rule)
       (compile-sexpr-grammar rules)
     `(let ((grammar (make-hash-table :test 'eq)))
-       ,@rule-forms
+       ,@@rule-forms
        ;; Apply standard hiccup reductions to get (:TAG ...) output format
        (iparse/reduction:apply-standard-reductions grammar)
        (%make-iparser :grammar grammar
@@ -426,7 +448,7 @@ Example:
     (number (regex \"[0-9]+\")))"
   (let ((parser-var (gensym "PARSER")))
     `(progn
-       (defparameter ,parser-var (grammar ,@rules)) ; lint:suppress special-name-style
+       (defvar ,parser-var (grammar ,@@rules))
        (defun ,name (text &key start)
          ,(format nil "Parse TEXT using the ~A grammar.~%~%Returns two values: result and success-p." name)
          (parse ,parser-var text :start start))
@@ -450,7 +472,7 @@ Example:
   `(let ((,var (parser ,grammar-spec :start ,start)))
      (flet ((,var (input &rest args)
               (apply #'parse ,var input args)))
-       ,@body)))
+       ,@@body)))
 
 
 ;;;; Pretty Printer for Parse Trees
@@ -468,14 +490,17 @@ Example output:
        (format stream "~ANIL~%" prefix))
       ((atom tree)
        (format stream "~A~S~%" prefix tree))
-      ((and (keywordp (first tree)) (listp (rest tree)))
+      ((and (keywordp (car tree)) (listp (cdr tree)))
        ;; Parse tree node
-       (format stream "~A(~S" prefix (first tree))
-       (cond ((and (= (length (rest tree)) 1)
-                (atom (cadr tree))) (format stream " ~S)~%" (cadr tree)))
-      (t
+       (format stream "~A(~S" prefix (car tree))
+       (if (and (= (length (cdr tree)) 1)
+                (atom (cadr tree)))
+           ;; Single atomic child - keep on same line
+           (format stream " ~S)~%" (cadr tree))
+           ;; Multiple or complex children - indent
+           (progn
              (format stream "~%")
-             (dolist (child (rest tree))
+             (dolist (child (cdr tree))
                (pprint-parse-tree child stream (+ indent *print-parse-tree-indent*)))
              (format stream "~A)~%" prefix))))
       (t
@@ -518,7 +543,8 @@ Example:
   (cond
     ((null tree) nil)
     ((atom tree) tree)
-    ((and (keywordp (first tree)) (listp (rest tree)))
-     (parse-node (first tree)
-                 (mapcar #'transform-with-methods (rest tree))))
+    ((and (keywordp (car tree)) (listp (cdr tree)))
+     (parse-node (car tree)
+                 (mapcar #'transform-with-methods (cdr tree))))
     (t (mapcar #'transform-with-methods tree))))
+@

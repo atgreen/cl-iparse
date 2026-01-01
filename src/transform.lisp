@@ -24,7 +24,11 @@ Each function receives the children of a matching node as arguments."
                ((stringp node)
                 node)
 
-               ;; Hiccup format: (:tag child1 child2 ...)
+               ;; Metaobject wrapper: unwrap, transform, return result
+               ((iparse/util:metaobject-p node)
+                (transform-node (iparse/util:metaobject-value node)))
+
+               ;; Tagged list format: (:tag child1 child2 ...)
                ((and (consp node) (keywordp (first node)))
                 (let* ((tag (first node))
                        (children (rest node))
@@ -65,24 +69,28 @@ Uses metadata attached during parsing if available."
                (cond
                  ((stringp node) node)
 
-                 ((and (consp node) (keywordp (first node)))
-                  (let* ((tag (first node))
-                         (children (rest node))
-                         (meta (iparse/util:get-meta node))
+                 ;; Handle metaobject-wrapped nodes
+                 ((iparse/util:metaobject-p node)
+                  (let* ((inner (iparse/util:metaobject-value node))
+                         (meta (iparse/util:metaobject-metadata node))
                          (start-index (getf meta :start-index))
                          (end-index (getf meta :end-index)))
-                    (if (and start-index end-index)
+                    (if (and (consp inner) (keywordp (first inner))
+                             start-index end-index)
                         (multiple-value-bind (start-line start-col)
                             (index->line-col start-index)
                           (multiple-value-bind (end-line end-col)
                               (index->line-col end-index)
-                            (list* tag
+                            (list* (first inner)
                                    :line start-line
                                    :column start-col
                                    :end-line end-line
                                    :end-column end-col
-                                   (mapcar #'annotate children))))
-                        (cons tag (mapcar #'annotate children)))))
+                                   (mapcar #'annotate (rest inner)))))
+                        (annotate inner))))
+
+                 ((and (consp node) (keywordp (first node)))
+                  (cons (first node) (mapcar #'annotate (rest node))))
 
                  ((listp node)
                   (mapcar #'annotate node))

@@ -1,8 +1,31 @@
-;;; auto-flatten-seq.lisp
+head	1.1;
+access;
+symbols;
+locks
+	green:1.1; strict;
+comment	@;;; @;
+
+
+1.1
+date	2026.01.01.12.35.43;	author green;	state Exp;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@'Before ocicl lint --fix'
+@
+text
+@;;; auto-flatten-seq.lisp
 ;;;
 ;;; SPDX-License-Identifier: EPL-1.0
 ;;;
-;;; Copyright (C) 2026 Anthony Green <green@moxielogic.com>
+;;; Copyright (C) 2026 Anthony Green <green@@moxielogic.com>
 ;;;
 ;;; This is a Common Lisp port of instaparse by Mark Engelberg.
 ;;; Original: https://github.com/Engelberg/instaparse
@@ -73,8 +96,8 @@ ITEM can be NIL (ignored), an atom (appended), or another AFS (merged/stacked)."
   seq)
 
 (defmethod conj-flat ((seq auto-flatten-seq) (item auto-flatten-seq))
-  "Concatenate two AFS instances with O(1) performance.
-Creates a new node referencing both; flattening is deferred."
+  "Concatenate two AFS instances.
+Small items are merged eagerly; large ones are stored as nested references."
   (cond
     ;; If seq is empty, just return item
     ((afs-empty-p seq)
@@ -84,23 +107,33 @@ Creates a new node referencing both; flattening is deferred."
     ((afs-empty-p item)
      seq)
 
-    ;; Create new node with references to both (true O(1))
+    ;; Small item: merge eagerly
+    ((<= (afs-count item) *afs-threshold*)
+     (let* ((seq-vec (afs-vector seq))
+            (item-list (afs-to-list item))
+            (new-vec (concatenate 'simple-vector seq-vec item-list))
+            (new-count (+ (afs-count seq) (afs-count item))))
+       (%make-afs :vector new-vec
+                  :count new-count
+                  :dirty-p (or (afs-dirty-p seq) (afs-dirty-p item)))))
+
+    ;; Large item: store as nested reference (mark dirty)
     (t
-     (%make-afs :vector (vector seq item)
-                :count (+ (afs-count seq) (afs-count item))
-                :dirty-p t))))
+     (let* ((seq-vec (afs-vector seq))
+            (new-vec (concatenate 'simple-vector seq-vec (vector item)))
+            (new-count (+ (afs-count seq) (afs-count item))))
+       (%make-afs :vector new-vec
+                  :count new-count
+                  :dirty-p t)))))
 
 (defmethod conj-flat ((seq auto-flatten-seq) item)
-  "Concatenate a scalar item onto SEQ with O(1) performance."
-  (if (afs-empty-p seq)
-      ;; Empty seq: create new single-element AFS
-      (%make-afs :vector (vector item)
-                 :count 1
-                 :dirty-p nil)
-      ;; Non-empty: create new node referencing seq and item
-      (%make-afs :vector (vector seq item)
-                 :count (1+ (afs-count seq))
-                 :dirty-p t)))
+  "Concatenate a scalar item onto SEQ."
+  (let* ((seq-vec (afs-vector seq))
+         (new-vec (concatenate 'simple-vector seq-vec (vector item)))
+         (new-count (1+ (afs-count seq))))
+    (%make-afs :vector new-vec
+               :count new-count
+               :dirty-p (afs-dirty-p seq))))
 
 
 ;;;; Lazy Flattening
@@ -141,7 +174,7 @@ Returns NIL when exhausted."
     (return-from advance nil))
 
   (let* ((parent-path (butlast index-path))
-         (current-idx (first (last index-path)))
+         (current-idx (car (last index-path)))
          (parent (if parent-path
                      (get-nested vec parent-path)
                      vec))
@@ -216,3 +249,4 @@ Elements should be atomic (not nested AFS)."
     (format stream ":count ~D~:[~; :dirty~]"
             (afs-count afs)
             (afs-dirty-p afs))))
+@

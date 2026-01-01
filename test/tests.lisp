@@ -5,6 +5,7 @@
 (defpackage #:iparse/tests
   (:use #:cl #:iparse)
   (:import-from #:iparse/abnf #:build-abnf-parser)
+  (:import-from #:iparse/util #:metaobject-p #:metaobject-value)
   (:export #:run-all-tests))
 
 (in-package #:iparse/tests)
@@ -14,6 +15,16 @@
 (defvar *test-count* 0)
 (defvar *pass-count* 0)
 (defvar *fail-count* 0)
+
+(defun strip-metadata (result)
+  "Recursively strip metaobject wrappers for comparison."
+  (cond
+    ((iparse/util:metaobject-p result)
+     (strip-metadata (iparse/util:metaobject-value result)))
+    ((consp result)
+     (cons (strip-metadata (first result))
+           (mapcar #'strip-metadata (rest result))))
+    (t result)))
 
 (defmacro deftest (name &body body)
   `(defun ,name ()
@@ -48,8 +59,9 @@
        (parse ,parser ,input)
      (unless success-p
        (error "Parse failed: ~A" result))
-     (unless (equal result ,expected)
-       (error "Expected ~S, got ~S" ,expected result))))
+     (let ((stripped (strip-metadata result)))
+       (unless (equal stripped ,expected)
+         (error "Expected ~S, got ~S" ,expected stripped)))))
 
 
 ;;;; Basic Combinator Tests
@@ -181,6 +193,22 @@
     (assert-parse-success p "5")))
 
 
+;;;; Partial Parsing Tests
+
+(deftest test-partial-parsing
+  ;; Without :partial, parsing "hello world" with a grammar that only matches "hello" should fail
+  (let ((p (parser "s = 'hello'")))
+    (multiple-value-bind (result success-p)
+        (parse p "hello world")
+      (assert-true (not success-p))))
+  ;; With :partial t, it should succeed and match just "hello"
+  (let ((p (parser "s = 'hello'")))
+    (multiple-value-bind (result success-p)
+        (parse p "hello world" :partial t)
+      (assert-true success-p)
+      (assert-equal '(:S "hello") (strip-metadata result)))))
+
+
 ;;;; Transform Tests
 
 (deftest test-transform
@@ -226,6 +254,10 @@
   ;; Lookahead tests
   (format t "~%Lookahead:~%")
   (test-negative-lookahead)
+
+  ;; Partial parsing tests
+  (format t "~%Partial Parsing:~%")
+  (test-partial-parsing)
 
   ;; ABNF tests
   (format t "~%ABNF:~%")
