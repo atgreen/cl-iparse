@@ -18,8 +18,10 @@ jobs:
 
     - name: Install ocicl
       run: |
-        curl -L -o ocicl.deb https://github.com/ocicl/ocicl/releases/latest/download/ocicl_amd64.deb
-        sudo dpkg -i ocicl.deb
+        gh release download --repo ocicl/ocicl --pattern '*_amd64.deb'
+        sudo dpkg -i ocicl_*_amd64.deb
+      env:
+        GH_TOKEN: ${{ github.token }}
 
     - name: Setup ocicl
       run: ocicl setup
