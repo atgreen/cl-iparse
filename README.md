@@ -362,6 +362,10 @@ Example:
 | `transform-with-methods` | Transform using `parse-node` generic function |
 | `pprint-parse-tree` | Pretty-print a parse tree |
 
+## Author
+
+Anthony Green <green@moxielogic.com>
+
 ## License
 
 Eclipse Public License 1.0 (same as instaparse)
