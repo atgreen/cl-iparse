@@ -364,8 +364,8 @@ Example:
 
 ## License
 
-MIT License
+Eclipse Public License 1.0 (same as instaparse)
 
 ## Acknowledgments
 
-This is a port of [instaparse](https://github.com/Engelberg/instaparse) by Mark Engelberg.
+This is a Common Lisp port of [instaparse](https://github.com/Engelberg/instaparse) by Mark Engelberg.

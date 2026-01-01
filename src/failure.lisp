@@ -1,8 +1,12 @@
 ;;; failure.lisp
 ;;;
-;;; SPDX-License-Identifier: MIT
+;;; SPDX-License-Identifier: EPL-1.0
 ;;;
-;;; Copyright (C) 2026 Your Name
+;;; Copyright (C) 2026 Anthony Green <green@moxielogic.com>
+;;;
+;;; This is a Common Lisp port of instaparse by Mark Engelberg.
+;;; Original: https://github.com/Engelberg/instaparse
+;;; Licensed under the Eclipse Public License 1.0.
 ;;;
 ;;; Parse failure handling and error reporting with line/column info.
 ;;; Provides both a structure for failure data and a condition for
