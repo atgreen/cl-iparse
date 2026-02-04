@@ -723,37 +723,36 @@ Initiates parsing if this is the first listener."
 (defun run-trampoline (tramp &optional found-result-p)
   "Execute the trampoline until exhausted or success found.
 Returns a lazy list of successful results."
-  (let ((stack (tramp-%stack tramp)))
-    (cond
-      ;; Success found - return it and prepare for more
-      ((tramp-%success tramp)
-       (let ((result (tramp-%success tramp)))
-         (setf (tramp-%success tramp) nil)
-         (cons result
-               (lambda () (run-trampoline tramp t)))))
+  (loop
+    (let ((stack (tramp-%stack tramp)))
+      (cond
+        ;; Success found - return it and prepare for more
+        ((tramp-%success tramp)
+         (let ((result (tramp-%success tramp)))
+           (setf (tramp-%success tramp) nil)
+           (return (cons result
+                         (lambda () (run-trampoline tramp t))))))
 
-      ;; Main stack has work
-      ((plusp (fill-pointer stack))
-       (let ((thunk (vector-pop stack)))
-         (funcall thunk))
-       (run-trampoline tramp found-result-p))
+        ;; Main stack has work
+        ((plusp (fill-pointer stack))
+         (let ((thunk (vector-pop stack)))
+           (funcall thunk)))
 
-      ;; Process negative listeners
-      ((tramp-%negative-listeners tramp)
-       (let ((entry (pop-highest-negative-listener tramp)))
-         (when entry
-           (funcall (rest entry))))
-       (run-trampoline tramp found-result-p))
+        ;; Process negative listeners
+        ((tramp-%negative-listeners tramp)
+         (let ((entry (pop-highest-negative-listener tramp)))
+           (when entry
+             (funcall (rest entry)))))
 
-      ;; Swap stacks for next generation
-      (found-result-p
-       (rotatef (tramp-%stack tramp) (tramp-%next-stack tramp))
-       (setf (fill-pointer (tramp-%next-stack tramp)) 0)
-       (incf (tramp-%generation tramp))
-       (run-trampoline tramp nil))
+        ;; Swap stacks for next generation
+        (found-result-p
+         (rotatef (tramp-%stack tramp) (tramp-%next-stack tramp))
+         (setf (fill-pointer (tramp-%next-stack tramp)) 0)
+         (incf (tramp-%generation tramp))
+         (setf found-result-p nil))
 
-      ;; Exhausted
-      (t nil))))
+        ;; Exhausted
+        (t (return nil))))))
 
 
 ;;;; Public Interface
