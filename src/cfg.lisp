@@ -51,19 +51,21 @@
   (with-output-to-string (out)
     (loop with i = 0
           while (< i (length s))
-          for char = (char s i)
-          do (cond ((and (char= char #\\) (< (1+ i) (length s))) (let ((next (char s (1+ i))))
-                   (case next
-                     (#\n (write-char #\Newline out) (incf i 2))
-                     (#\t (write-char #\Tab out) (incf i 2))
-                     (#\r (write-char #\Return out) (incf i 2))
-                     (#\\ (write-char #\\ out) (incf i 2))
-                     (#\' (write-char #\' out) (incf i 2))
-                     (#\" (write-char #\" out) (incf i 2))
-                     (otherwise (write-char char out) (incf i)))))
-      (t
-                   (write-char char out)
-                   (incf i))))))
+          do
+             (let ((char (char s i)))
+               (cond ((and (char= char #\\) (< (1+ i) (length s)))
+                      (let ((next (char s (1+ i))))
+                        (case next
+                          (#\n (write-char #\Newline out) (incf i 2))
+                          (#\t (write-char #\Tab out) (incf i 2))
+                          (#\r (write-char #\Return out) (incf i 2))
+                          (#\\ (write-char #\\ out) (incf i 2))
+                          (#\' (write-char #\' out) (incf i 2))
+                          (#\" (write-char #\" out) (incf i 2))
+                          (otherwise (write-char char out) (incf i)))))
+                     (t
+                      (write-char char out)
+                      (incf i)))))))
 
 (defun process-string (s)
   "Extract and unescape a quoted string literal."
